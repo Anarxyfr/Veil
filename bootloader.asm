@@ -7,62 +7,124 @@ start:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov sp, 0x7C00
-    cld
+    mov sp, 0x7A00
 
-enable_a20:
-    in al, 0x92
-    test al, 2
-    jnz a20_done
-    or al, 2
-    and al, 0xFE
-    out 0x92, al
+    mov si, msg_a20
+    call print
 
-a20_done:
-    mov si, a20_msg
-    call print_string
+    call enable_a20
 
-    lgdt [gdt_descriptor]
-    mov si, gdt_msg
-    call print_string
+    mov si, msg_gdt
+    call print
+    lgdt [gdt_desc]
 
+    mov si, msg_pae
+    call print
+    mov eax, cr4
+    or eax, (1 << 5)  ; Set PAE bit (bit 5)
+    mov cr4, eax
+
+    mov si, msg_pe
+    call print
     mov eax, cr0
-    or eax, 0x1
+    or eax, 1
     mov cr0, eax
-    jmp 0x08:protected_mode
+
+    jmp 0x08:pmode
 
 bits 32
-protected_mode:
+pmode:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
     mov ss, ax
-    hlt
+    mov esp, 0x8000
 
-bits 16
-print_string:
+    mov esi, msg_done
+    call print32
+
+    jmp $
+
+enable_a20:
+    call .kb_wait
+    mov al, 0xAD
+    out 0x64, al
+    
+    call .kb_wait
+    mov al, 0xD0
+    out 0x64, al
+    
+    call .kb_wait2
+    in al, 0x60
+    push eax
+    
+    call .kb_wait
+    mov al, 0xD1
+    out 0x64, al
+    
+    call .kb_wait
+    pop eax
+    or al, 2
+    out 0x60, al
+    
+    call .kb_wait
+    mov al, 0xAE
+    out 0x64, al
+    ret
+
+.kb_wait:
+    in al, 0x64
+    test al, 2
+    jnz .kb_wait
+    ret
+
+.kb_wait2:
+    in al, 0x64
+    test al, 1
+    jz .kb_wait2
+    ret
+
+print:
     lodsb
-    or al, al
+    test al, al
     jz .done
     mov ah, 0x0E
     int 0x10
-    jmp print_string
+    jmp print
 .done:
     ret
 
-gdt_start:
-    dq 0x0
-    dw 0xFFFF, 0x0, 0x9A00, 0x00CF
-    dw 0xFFFF, 0x0, 0x9200, 0x00CF
+print32:
+    mov edi, 0xB8000
+    mov ah, 0x0F
+.loop:
+    lodsb
+    test al, al
+    jz .done
+    stosw
+    jmp .loop
+.done:
+    ret
 
-gdt_descriptor:
-    dw gdt_descriptor - gdt_start - 1
-    dd gdt_start
+msg_a20 db "Enabling A20...", 0
+msg_gdt db "Loading GDT...", 0
+msg_pae db "Enabling PAE...", 0
+msg_pe db "Setting PE bit...", 0
+msg_done db "Fully entered x32 with PAE!", 0
 
-a20_msg db 'A20 loaded', 0x0D, 0x0A, 0
-gdt_msg db 'GDT loaded', 0x0D, 0x0A, 0
+gdt:
+    dq 0
+    dw 0xFFFF, 0
+    db 0, 0x9A, 0xCF, 0
+    dw 0xFFFF, 0
+    db 0, 0x92, 0xCF, 0
+gdt_end:
 
-times 510 - ($-$$) db 0
+gdt_desc:
+    dw gdt_end - gdt - 1
+    dd gdt
+
+times 510-($-$$) db 0
 dw 0xAA55
