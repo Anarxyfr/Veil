@@ -9,6 +9,9 @@ start:
     mov ss, ax
     mov sp, 0x7A00
 
+    mov ax, 0x0003
+    int 0x10
+
     mov si, msg_a20
     call print
 
@@ -21,7 +24,7 @@ start:
     mov si, msg_pae
     call print
     mov eax, cr4
-    or eax, (1 << 5)  ; Set PAE bit (bit 5)
+    or eax, (1 << 5)
     mov cr4, eax
 
     mov si, msg_pe
@@ -42,6 +45,11 @@ pmode:
     mov ss, ax
     mov esp, 0x8000
 
+    mov edi, 0xB8000
+    mov ecx, 80*25
+    mov ax, 0x0F20
+    rep stosw
+
     mov esi, msg_done
     call print32
 
@@ -51,35 +59,28 @@ enable_a20:
     call .kb_wait
     mov al, 0xAD
     out 0x64, al
-    
     call .kb_wait
     mov al, 0xD0
     out 0x64, al
-    
     call .kb_wait2
     in al, 0x60
     push eax
-    
     call .kb_wait
     mov al, 0xD1
     out 0x64, al
-    
     call .kb_wait
     pop eax
     or al, 2
     out 0x60, al
-    
     call .kb_wait
     mov al, 0xAE
     out 0x64, al
     ret
-
 .kb_wait:
     in al, 0x64
     test al, 2
     jnz .kb_wait
     ret
-
 .kb_wait2:
     in al, 0x64
     test al, 1
@@ -108,10 +109,10 @@ print32:
 .done:
     ret
 
-msg_a20 db "Enabling A20...", 0
-msg_gdt db "Loading GDT...", 0
-msg_pae db "Enabling PAE...", 0
-msg_pe db "Setting PE bit...", 0
+msg_a20 db "Enabling A20...", 0x0D, 0x0A, 0
+msg_gdt db "Loading GDT...", 0x0D, 0x0A, 0
+msg_pae db "Enabling PAE...", 0x0D, 0x0A, 0
+msg_pe db "Setting PE bit...", 0x0D, 0x0A, 0
 msg_done db "Fully entered x32 with PAE!", 0
 
 gdt:
